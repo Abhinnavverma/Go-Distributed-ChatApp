@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chat Test</title>
+</head>
+<body>
+    <h1>Testing the Hub 📡</h1>
+    <pre id="output"></pre>
+    <input type="text" id="input" placeholder="Type message...">
+    <button onclick="send()">Send</button>
+    
+    <script>
+        const socket = new WebSocket("ws://localhost:8080/ws");
+        
+        socket.onopen = () => console.log("Connected");
+        socket.onmessage = (e) => {
+            document.getElementById("output").innerText += e.data + "\n";
+        };
+
+
+        function send() {
+            const input = document.getElementById("input");
+            socket.send(input.value);
+            input.value = "";
+        }
+    </script>
+</body>
+</html>

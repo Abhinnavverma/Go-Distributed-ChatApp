@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  # Service 1: The Megaphone 📢
+  redis:
+    image: redis:alpine
+    container_name: chat-redis
+    ports:
+      - "6379:6379"
+
+  # Service 2: Your Code (The Replicas) 🤖
+  app:
+    build: .
+    # Note: We don't publish ports (8080:8080) because we don't want
+    # users bypassing Nginx. Only Nginx can talk to these.
+    environment:
+      - REDIS_ADDR=redis:6379 # Docker magic: 'redis' resolves to the container IP
+    depends_on:
+      - redis
+
+  # Service 3: The Gatekeeper 🛡️
+  nginx:
+    image: nginx:alpine
+    container_name: chat-nginx
+    ports:
+      - "80:80" # The only door open to the public
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - app
