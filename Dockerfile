@@ -12,7 +12,7 @@ RUN go mod download
 COPY . .
 
 # 5. Build the application named "server"
-RUN go build -o server .
+RUN go build -o server ./cmd/server
 
 # 6. Expose the port (Documentary only, but good practice)
 EXPOSE 8080

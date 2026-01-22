@@ -2,28 +2,298 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Chat Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Chat Deluxe</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --chat-bg: #2d2d2d;
+            --input-bg: #404040;
+            --primary: #007bff;
+            --text: #ffffff;
+            --secondary-text: #b0b0b0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            height: 90vh;
+            background-color: var(--chat-bg);
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* --- Auth Screens --- */
+        #auth-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--chat-bg);
+            z-index: 10;
+            display: flex; /* Hidden by JS when logged in */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .auth-form {
+            width: 100%;
+            max-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        input {
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #555;
+            background: var(--input-bg);
+            color: white;
+            outline: none;
+        }
+
+        button {
+            padding: 12px;
+            border-radius: 6px;
+            border: none;
+            background: var(--primary);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:hover { opacity: 0.9; }
+        button.secondary { background: #555; }
+
+        .error { color: #ff4d4d; margin-top: 10px; font-size: 0.9em; text-align: center; }
+
+        /* --- Chat Screen --- */
+        header {
+            padding: 15px;
+            background: #232323;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #444;
+        }
+
+        #chat-window {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .message {
+            max-width: 70%;
+            padding: 10px 15px;
+            border-radius: 18px;
+            font-size: 0.95em;
+            line-height: 1.4;
+            position: relative;
+            word-wrap: break-word;
+        }
+
+        .message.mine {
+            align-self: flex-end;
+            background-color: var(--primary);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.theirs {
+            align-self: flex-start;
+            background-color: var(--input-bg);
+            color: var(--text);
+            border-bottom-left-radius: 4px;
+        }
+
+        .username {
+            font-size: 0.75em;
+            color: var(--secondary-text);
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        #input-area {
+            padding: 15px;
+            background: #232323;
+            display: flex;
+            gap: 10px;
+        }
+
+        #msg-input { flex: 1; }
+    </style>
 </head>
 <body>
-    <h1>Testing the Hub 📡</h1>
-    <pre id="output"></pre>
-    <input type="text" id="input" placeholder="Type message...">
-    <button onclick="send()">Send</button>
-    
-    <script>
-        const socket = new WebSocket("ws://localhost:8080/ws");
+
+    <div class="container">
+        <div id="auth-screen">
+            <h2 id="auth-title">Login to Chat</h2>
+            <div class="auth-form">
+                <input type="text" id="username" placeholder="Username" />
+                <input type="password" id="password" placeholder="Password" />
+                <button id="auth-btn" onclick="handleLogin()">Login</button>
+                <button class="secondary" id="toggle-btn" onclick="toggleAuthMode()">Need an account? Register</button>
+            </div>
+            <div id="auth-error" class="error"></div>
+        </div>
+
+        <header>
+            <span id="user-display">Not Logged In</span>
+            <button onclick="logout()" style="padding: 5px 10px; font-size: 0.8em; background: #d9534f;">Logout</button>
+        </header>
         
-        socket.onopen = () => console.log("Connected");
-        socket.onmessage = (e) => {
-            document.getElementById("output").innerText += e.data + "\n";
-        };
+        <div id="chat-window">
+            </div>
 
+        <div id="input-area">
+            <input type="text" id="msg-input" placeholder="Type a message..." onkeypress="handleKeyPress(event)" />
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
 
-        function send() {
-            const input = document.getElementById("input");
-            socket.send(input.value);
-            input.value = "";
+    <script>
+        let isRegistering = false;
+        let ws;
+        let currentUser = null;
+
+        // --- Auth Logic ---
+
+        function toggleAuthMode() {
+            isRegistering = !isRegistering;
+            document.getElementById('auth-title').innerText = isRegistering ? "Register New User" : "Login to Chat";
+            document.getElementById('auth-btn').innerText = isRegistering ? "Register" : "Login";
+            document.getElementById('toggle-btn').innerText = isRegistering ? "Have an account? Login" : "Need an account? Register";
+            document.getElementById('auth-error').innerText = "";
         }
+
+        async function handleLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const endpoint = isRegistering ? '/register' : '/login';
+
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.message || 'Something went wrong');
+
+                if (isRegistering) {
+                    // Auto switch to login after register
+                    alert("Registration Successful! Please Login.");
+                    toggleAuthMode();
+                } else {
+                    // Login Success
+                    localStorage.setItem('token', data.access_token);
+                    localStorage.setItem('username', data.username);
+                    startChat(data.username, data.access_token);
+                }
+            } catch (err) {
+                document.getElementById('auth-error').innerText = err.message;
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            if (ws) ws.close();
+            location.reload();
+        }
+
+        // --- Chat Logic ---
+
+        function startChat(username, token) {
+            currentUser = username;
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('user-display').innerText = `Logged in as: ${username}`;
+
+            // Connect WebSocket with Token
+            // Note: We send token in Query Param
+            ws = new WebSocket(`ws://${location.host}/ws?token=${token}`);
+
+            ws.onmessage = function(event) {
+                // Try to parse JSON, if fails, treat as plain text (legacy support)
+                try {
+                    const msgData = JSON.parse(event.data);
+                    addMessageToUI(msgData.username, msgData.content);
+                } catch (e) {
+                    addMessageToUI("System", event.data);
+                }
+            };
+
+            ws.onclose = function() {
+                alert("Connection lost. Please refresh.");
+            };
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('msg-input');
+            const msg = input.value;
+            if (msg && ws) {
+                ws.send(msg); // Send raw text (Backend wraps it)
+                input.value = '';
+            }
+        }
+
+        function addMessageToUI(sender, content) {
+            const chatWindow = document.getElementById('chat-window');
+            const div = document.createElement('div');
+            const isMine = sender === currentUser;
+            
+            div.className = `message ${isMine ? 'mine' : 'theirs'}`;
+            
+            // Only show username if it's not me
+            let html = '';
+            if (!isMine) {
+                html += `<span class="username">${sender}</span>`;
+            }
+            html += content;
+            
+            div.innerHTML = html;
+            chatWindow.appendChild(div);
+            chatWindow.scrollTop = chatWindow.scrollHeight; // Auto scroll
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === 'Enter') sendMessage();
+        }
+
+        // --- Auto Login Check ---
+        const savedToken = localStorage.getItem('token');
+        const savedUser = localStorage.getItem('username');
+        if (savedToken && savedUser) {
+            startChat(savedUser, savedToken);
+        }
+
     </script>
 </body>
 </html>

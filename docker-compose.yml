@@ -1,30 +1,55 @@
 version: '3.8'
 
 services:
-  # Service 1: The Megaphone 📢
+  # 1. The Cache ⚡
   redis:
     image: redis:alpine
     container_name: chat-redis
     ports:
       - "6379:6379"
 
-  # Service 2: Your Code (The Replicas) 🤖
+  # 2. The Database 🐘
+  db:
+    image: postgres:15-alpine
+    container_name: chat-db
+    environment:
+     - POSTGRES_USER=${POSTGRES_USER}        
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d chat_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 3. The App 🤖
   app:
     build: .
-    # Note: We don't publish ports (8080:8080) because we don't want
-    # users bypassing Nginx. Only Nginx can talk to these.
     environment:
-      - REDIS_ADDR=redis:6379 # Docker magic: 'redis' resolves to the container IP
+      - REDIS_ADDR=redis:6379
+      - DB_DSN=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      - JWT_SECRET=${JWT_SECRET}
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      # 👇 CRITICAL: Wait for healthcheck, or app crashes on startup
+      db:
+        condition: service_healthy
 
-  # Service 3: The Gatekeeper 🛡️
+  # 4. The Load Balancer 🛡️
   nginx:
     image: nginx:alpine
     container_name: chat-nginx
     ports:
-      - "80:80" # The only door open to the public
+      - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
     depends_on:
       - app
+
+volumes:
+  postgres_data:
