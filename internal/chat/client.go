@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"encoding/json"
 	"log"
 	"time"
 
@@ -40,11 +41,23 @@ func (c *Client) ReadPump() {
 			break
 		}
 
-		// Send to Hub with identity
-		c.Hub.Publish <- &IncomingMessage{
-			UserID:   c.UserID,
-			Username: c.Username,
-			Content:  string(message),
+		// 🟢 PURE JSON PARSING: Only Content and ConversationID
+		var msgReq struct {
+			Content        string `json:"content"`
+			ConversationID int    `json:"conversation_id"`
+		}
+
+		if err := json.Unmarshal(message, &msgReq); err != nil {
+			log.Printf("❌ Invalid JSON format: %v", err)
+			continue
+		}
+
+		// Send to Hub (Hub will figure out the recipient)
+		c.Hub.Publish <- &Message{
+			UserID:         c.UserID,
+			Username:       c.Username,
+			Content:        msgReq.Content,
+			ConversationID: msgReq.ConversationID,
 		}
 	}
 }

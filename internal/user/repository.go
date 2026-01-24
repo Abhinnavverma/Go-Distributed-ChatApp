@@ -41,3 +41,22 @@ func (r *Repository) GetUserByUsername(ctx context.Context, username string) (*U
 
 	return u, nil
 }
+func (r *Repository) SearchUsers(ctx context.Context, query string) ([]User, error) {
+	// We limit to 10 to keep it fast
+	q := `SELECT id, username FROM users WHERE username ILIKE $1 LIMIT 10`
+	rows, err := r.db.QueryContext(ctx, q, "%"+query+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Username); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, nil
+}

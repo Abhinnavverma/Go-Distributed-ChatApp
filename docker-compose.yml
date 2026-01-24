@@ -13,7 +13,7 @@ services:
     image: postgres:15-alpine
     container_name: chat-db
     environment:
-     - POSTGRES_USER=${POSTGRES_USER}        
+      - POSTGRES_USER=${POSTGRES_USER}        
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
@@ -21,7 +21,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d chat_db"]
+      test: ["CMD-SHELL", "pg_isready -U myuser -d chat_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -30,9 +30,13 @@ services:
   app:
     build: .
     environment:
-      - REDIS_ADDR=redis:6379
+      - REDIS_ADDR=${REDIS_ADDR}
       - DB_DSN=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
       - JWT_SECRET=${JWT_SECRET}
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     depends_on:
       redis:
         condition: service_started

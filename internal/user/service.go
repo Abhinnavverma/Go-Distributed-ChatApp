@@ -87,3 +87,7 @@ func (s *Service) ValidateToken(tokenString string) (int, string, error) {
 
 	return claims.ID, claims.Username, nil
 }
+
+func (s *Service) SearchUsers(ctx context.Context, query string) ([]User, error) {
+	return s.repo.SearchUsers(ctx, query)
+}

@@ -10,7 +10,7 @@ import (
 )
 
 type Database struct {
-	Conn *sql.DB // Exported so other packages can use it
+	Conn *sql.DB
 }
 
 func NewDatabase(dsn string) (*Database, error) {
@@ -19,7 +19,6 @@ func NewDatabase(dsn string) (*Database, error) {
 		return nil, err
 	}
 
-	// Ping check
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := conn.PingContext(ctx); err != nil {
@@ -32,25 +31,36 @@ func NewDatabase(dsn string) (*Database, error) {
 }
 
 func (d *Database) AutoMigrate() error {
-	// 1. Define the Tables
 	queries := []string{
-		// Users Table
 		`CREATE TABLE IF NOT EXISTS users (
-			id SERIAL PRIMARY KEY,
-			username VARCHAR(50) UNIQUE NOT NULL,
-			password VARCHAR(255) NOT NULL
-		);`,
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(50) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
 
-		// Messages Table
+		`CREATE TABLE IF NOT EXISTS conversations (
+            id SERIAL PRIMARY KEY,
+            type VARCHAR(10) CHECK (type IN ('private', 'group')) DEFAULT 'private',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+
+		`CREATE TABLE IF NOT EXISTS participants (
+            conversation_id INT REFERENCES conversations(id) ON DELETE CASCADE,
+            user_id INT REFERENCES users(id) ON DELETE CASCADE,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (conversation_id, user_id)
+        )`,
+
 		`CREATE TABLE IF NOT EXISTS messages (
-			id SERIAL PRIMARY KEY,
-			user_id INT NOT NULL REFERENCES users(id),
-			content TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);`,
+            id SERIAL PRIMARY KEY,
+            conversation_id INT REFERENCES conversations(id) ON DELETE CASCADE,
+            sender_id INT REFERENCES users(id) ON DELETE CASCADE,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
 	}
 
-	// 2. Execute them
 	for _, query := range queries {
 		_, err := d.Conn.Exec(query)
 		if err != nil {
