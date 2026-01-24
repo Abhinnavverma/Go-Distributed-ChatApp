@@ -45,3 +45,25 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(res)
 }
+
+// Add this to your handler.go
+func (h *Handler) SearchUsers(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "Query is required", http.StatusBadRequest)
+		return
+	}
+
+	// Call Service -> Repo (Or Repo directly if you skipped Service layer for simplicity)
+	// Assuming you wired repo directly or added it to service:
+	users, err := h.Service.SearchUsers(r.Context(), query)
+	// ^ NOTE: If you don't have a Service method, just add SearchUsers to Service interface too.
+
+	if err != nil {
+		http.Error(w, "Search failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
+}

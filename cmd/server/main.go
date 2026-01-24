@@ -24,8 +24,7 @@ func main() {
 	// Get Secrets from Environment (Docker)
 	dsn := os.Getenv("DB_DSN")
 	if dsn == "" {
-		// Fallback for local testing
-		log.Fatal("❌ DB_DSN is not set in environment or .env file")
+		log.Fatal("❌ DB_DSN is not set")
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
@@ -44,6 +43,7 @@ func main() {
 		log.Fatalf("❌ Failed to connect to DB: %v", err)
 	}
 	log.Println("✅ Connected to PostgreSQL")
+
 	if err := database.AutoMigrate(); err != nil {
 		log.Fatalf("❌ Migration failed: %v", err)
 	}
@@ -53,28 +53,31 @@ func main() {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: redisAddr,
 	})
-	// Test Redis connection
 	if _, err := redisClient.Ping(context.Background()).Result(); err != nil {
 		log.Fatalf("❌ Failed to connect to Redis: %v", err)
 	}
 	log.Println("✅ Connected to Redis")
 
-	// 4. Initialize User Feature (Identity)
-	// Notice: We pass database.Conn (the raw *sql.DB) to the repo
+	// 4. Initialize User Feature
+	// User Repo still uses the raw SQL connection (assuming you didn't change user/repository.go)
 	userRepo := user.NewRepository(database.Conn)
 	userService := user.NewService(userRepo, jwtSecret)
 	userHandler := user.NewHandler(userService)
 
-	// 5. Initialize Chat Feature (Real-time)
+	// 5. Initialize Chat Feature
+	// 🟢 UDPATE 1: ChatRepo now takes the *db.Database wrapper (to access Conn)
 	chatRepo := chat.NewRepository(database.Conn)
+
+	// Hub needs Redis + Repo (to fetch participants)
 	hub := chat.NewHub(redisClient, chatRepo)
 
-	// ⚠️ CRITICAL: Start the Hub in a separate goroutine!
-	// If you forget this, the chat will never broadcast messages.
+	// Start the Hub Engines
 	go hub.Run()
-	go hub.SubscribeToRedis() // Listen for messages from other containers
+	go hub.SubscribeToRedis()
 
-	chatHandler := chat.NewHandler(hub, userService)
+	// 🟢 UPDATE 2: ChatHandler now needs Repo (for API) + Hub (for WS)
+	chatHandler := chat.NewHandler(hub, chatRepo)
+
 	authMiddleware := myMiddleware.NewAuthMiddleware(userService)
 
 	// 6. Define Routes
@@ -89,11 +92,17 @@ func main() {
 		http.ServeFile(w, r, "index.html")
 	})
 
-	// Protected Routes
+	// Protected Routes (Require JWT)
 	r.Group(func(r chi.Router) {
-		// Apply our custom middleware
 		r.Use(authMiddleware.Handle)
+		r.Get("/api/users/search", userHandler.SearchUsers)
+
+		// WebSocket (Real-time)
 		r.Get("/ws", chatHandler.ServeWs)
+
+		// 🟢 UPDATE 3: New REST API Routes for "WhatsApp" flow
+		r.Post("/api/conversations", chatHandler.StartConversation) // Find/Create Chat
+		r.Get("/api/messages", chatHandler.GetChatHistory)          // Load History
 	})
 
 	log.Printf("🚀 Server starting on %s", *addr)
